@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sockets="http://www.mulesoft.org/schema/mule/sockets" xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:anypoint-security-tokenization="http://www.mulesoft.org/schema/mule/anypoint-security-tokenization" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/anypoint-security-tokenization http://www.mulesoft.org/schema/mule/anypoint-security-tokenization/current/mule-anypoint-security-tokenization.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/sockets http://www.mulesoft.org/schema/mule/sockets/current/mule-sockets.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="aa1e32be-898e-4f38-bd63-baef92ad02ec" >
+		<http:listener-connection host="0.0.0.0" port="8082" protocol="HTTPS">
+			<tls:context >
+				<tls:key-store type="jks" path="keystore.jks" alias="mule" keyPassword="password" password="password"/>
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+	<http:request-config name="HTTPS_Request_configuration" doc:name="HTTP Request configuration" doc:id="96332d7c-7e85-40b7-8d4c-224bf727a682" basePath="/AnypointSecurityTokenization/v1" >
+		<http:request-connection protocol="HTTPS" host="tokenization-demo.public-rtf.demos.mulesoft.com" port="443" >
+			<tls:context >
+				<tls:trust-store insecure="true" />
+			</tls:context>
+		</http:request-connection>
+	</http:request-config>
+	<http:listener-config name="HTTP_Listener_config1" doc:name="HTTP Listener config" doc:id="885333bf-3a0a-4fb6-8627-f17bdd34773a" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="eb36a5cd-d3c8-4aad-9fa5-f3c06c24024f" basePath="tokenization-demo.public-rtf.demos.mulesoft.com" >
+		<http:request-connection protocol="HTTPS" >
+			<tls:context >
+				<tls:trust-store insecure="true" />
+			</tls:context>
+		</http:request-connection>
+	</http:request-config>
+	<flow name="log-tokenizationFlow" doc:id="dad065a6-1bfe-4eac-a62b-8118763734eb" >
+		<http:listener doc:name="Listener" doc:id="75367e41-bf2b-4d29-966a-5fc4eaf1b3bf" config-ref="HTTP_Listener_config1" path="/customer/tokenize"/>
+		<set-variable value="#[payload]" doc:name="Set inbound data as variable" doc:id="88bab901-36d1-4303-9904-14570e46ce00" variableName="data"/>
+		<ee:transform doc:name="Pass in values to be tokenized" doc:id="701d596c-7493-4f74-b343-35e98fb6442d">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+[{
+	data: payload.email,
+	format: "EmailFormat",
+	id: "email"
+},{
+	data: payload.creditCardNum,
+	format: "CardFormat",
+	id: "cc"
+}
+]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Request" doc:id="6cf8a423-97be-4482-a65d-58cbc36bcc25" config-ref="HTTPS_Request_configuration" path="/tokenization">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+		</http:request>
+		<foreach doc:name="For Each" doc:id="962deaae-038c-45bb-82d2-4c06541dac1e" collection="#[payload]">
+			<choice doc:name="Choice" doc:id="4e474e7c-9139-482a-9309-208a889e74eb" >
+				<when expression='#[payload.id == "cc"]'>
+					<set-variable value="#[payload.data]" doc:name="tokenizedCC" doc:id="3401f972-6ddd-4182-b85b-e6e09ae824ae" variableName="tokenizedCC"/>
+				</when>
+				<when expression='#[payload.id == "email"]'>
+					<set-variable value="#[payload.data]" doc:name="tokenizedEmail" doc:id="29a9d0e1-5166-466a-96b6-0895b8742587" variableName="tokenizedEmail" />
+				</when>
+				<otherwise>
+					<logger level="INFO" doc:name="Log bad result" doc:id="5951645a-11d7-4c42-a8a2-08702e755024" message="#[payload]"/>
+				</otherwise>
+			</choice>
+		</foreach>
+		<ee:transform doc:name="Rebuild payload with tokenized data" doc:id="c7934d80-0cb3-492f-885d-346bf3ca3d36" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	firstName: vars.data.firstName,
+	lastName: vars.data.lastName,
+	email: vars.tokenizedEmail,
+	creditCardProvider: vars.data.creditCardProvider,
+	creditCardNum: vars.tokenizedCC
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Pass tokenized data to logging service" doc:id="24018bf5-4f19-4217-bf43-96656c86ecbb" message="#[payload]"/>
+	</flow>
+</mule>
