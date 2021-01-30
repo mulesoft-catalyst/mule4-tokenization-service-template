@@ -23,7 +23,7 @@ Call Tokenization Proxy : POST htttps://tokenization-proxy.external.domain.com:4
 
 
 
-
+![Screen](/img/image1.png)
 
 
 
