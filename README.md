@@ -39,4 +39,4 @@ To configure and use the tokenization service, you need:
 
  3. A tokenization format
 
-![Domains](img/image2.png)
+![Screen](img/image2.png)
